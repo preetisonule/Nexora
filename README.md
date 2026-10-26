@@ -391,13 +391,15 @@ npm test
 
 ## Team
 
-| Name | Roll No. | Role |
-|---|---|---|
-| _Your Name_ | _—_ | _Frontend / UI_ |
-| _Team Member_ | _—_ | _Backend / API_ |
-| _Team Member_ | _—_ | _Database / Testing_ |
+| Juno Roll No. | Name | GitHub | Repository |
+|---|---|---|---|
+| 11 | Shreeya Amit Kalebere | [@ShreeyaKalebere](https://github.com/ShreeyaKalebere) | [ShreeyaKalebere/Nexora](https://github.com/ShreeyaKalebere/Nexora) |
+| 12 | Shubham Shankar Pattewar | [@shubham-pattewar](https://github.com/shubham-pattewar) | [shubham-pattewar/Nexora](https://github.com/shubham-pattewar/Nexora) |
+| 13 | Anuj Arun Powar | [@Anujpowar03](https://github.com/Anujpowar03) | [Anujpowar03/Nexora](https://github.com/Anujpowar03/Nexora) |
+| 14 | Virendra Vilas Katale | [@Virendrak0741](https://github.com/Virendrak0741) | [Virendrak0741/Nexora](https://github.com/Virendrak0741/Nexora) |
+| 15 | Preeti Nishikant Sonule | [@preetisonule](https://github.com/preetisonule) | [preetisonule/Nexora](https://github.com/preetisonule/Nexora) |
 
-**Guide:** _Faculty name_ · **Course:** Semester 7 — Golang Course Mini Project
+**Subject:** MERN Stack Development (Assignment No. 13) · **College:** D. Y. Patil College of Engineering and Technology, Kolhapur — Computer Science &amp; Engg.
 
 ---
 
