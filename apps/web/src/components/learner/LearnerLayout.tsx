@@ -52,14 +52,14 @@ const navItems = [
   { label: 'Overview', path: '/dashboard', icon: <DashboardOutlinedIcon /> },
   { label: 'Curriculum', path: '/courses', icon: <MenuBookOutlinedIcon /> },
   { label: 'Learning Path', path: '/courses/go-programming/learning-path', icon: <ExploreOutlinedIcon /> },
-  { label: 'Coding Workspace', path: '/learn/go-programming/assignment/default-assignment', icon: <CodeRoundedIcon /> },
+  { label: 'Coding Practice', path: '/practice', icon: <CodeRoundedIcon /> },
   { label: 'Capstone Project', path: '/projects', icon: <FolderSpecialOutlinedIcon /> },
   { label: 'My Certificates', path: '/certificates', icon: <WorkspacePremiumOutlinedIcon /> },
   { label: 'Settings', path: '/settings', icon: <SettingsOutlinedIcon /> },
 ];
 
 export const LearnerLayout: React.FC = () => {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isAuthenticated, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
@@ -71,11 +71,12 @@ export const LearnerLayout: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const publicRoutes = ['/', '/login', '/register', '/forgot-password'];
-  const isPublicRoute = publicRoutes.includes(location.pathname) || location.pathname.startsWith('/verify/');
-  const isFocusedLearnRoute = location.pathname.startsWith('/learn/');
+  const isPublicRoute = publicRoutes.includes(location.pathname) || location.pathname.startsWith('/verify');
+  // Only the lesson reader and the code editor use the distraction-free full-screen layout
+  const isFocusedLearnRoute = /^\/learn\/[^/]+\/(lesson|assignment)\//.test(location.pathname);
 
-  // Public pages: marketing header + footer
-  if (isPublicRoute) {
+  // Public pages (and any page a logged-out visitor can open): marketing header + footer
+  if (isPublicRoute || !isAuthenticated) {
     return (
       <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
         <Header />

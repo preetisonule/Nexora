@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { AssignmentController } from '../controllers/assignmentController';
-import { authenticate } from '../middleware/authMiddleware';
+import { authenticate, optionalAuth } from '../middleware/authMiddleware';
 import { requireRole } from '../middleware/roleMiddleware';
 
 const router = Router();
 
-router.get('/:id', authenticate, AssignmentController.getAssignmentById);
+router.get('/', optionalAuth, AssignmentController.listAssignments);
 router.post('/run', authenticate, AssignmentController.runCode);
+router.get('/:id', authenticate, AssignmentController.getAssignmentById);
 router.post('/:id/submit', authenticate, AssignmentController.submitSolution);
 router.get('/:id/submissions', authenticate, AssignmentController.getSubmissions);
 

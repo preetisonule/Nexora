@@ -10,6 +10,59 @@ import { ProgressService } from '../services/progressService';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 
 export class AssignmentController {
+  /** GET /assignments?moduleId= — coding assignments for a module (or all, for admins) with the learner's status. */
+  public static async listAssignments(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { moduleId } = req.query;
+      const isAdmin = !!req.user && ['admin', 'superadmin', 'instructor'].includes(req.user.role);
+
+      const filter: any = {};
+      if (moduleId) {
+        if (!mongoose.isValidObjectId(moduleId)) {
+          res.json({ success: true, data: [] });
+          return;
+        }
+        filter.moduleId = moduleId;
+      }
+      if (!isAdmin) filter.published = true;
+
+      const assignments = await Assignment.find(filter).populate('moduleId', 'title order').sort({ createdAt: 1 });
+
+      const data = await Promise.all(
+        assignments.map(async (a) => {
+          const testCaseCount = await TestCase.countDocuments({ assignmentId: a._id });
+          let userStats = null;
+          if (req.user) {
+            const best = await Submission.findOne({ learnerId: req.user._id, assignmentId: a._id }).sort({ score: -1 });
+            const passed = !!(await Submission.exists({ learnerId: req.user._id, assignmentId: a._id, passed: true }));
+            userStats = { attempted: !!best, bestScore: best?.score ?? null, passed };
+          }
+          const mod: any = a.moduleId;
+          return {
+            id: a._id.toString(),
+            moduleId: mod?._id?.toString() ?? mod?.toString(),
+            moduleTitle: mod?.title,
+            moduleOrder: mod?.order,
+            title: a.title,
+            slug: a.slug,
+            description: a.description,
+            difficulty: a.difficulty,
+            timeLimitMs: a.timeLimitMs,
+            passingScore: a.passingScore,
+            published: a.published,
+            testCaseCount,
+            userStats,
+          };
+        })
+      );
+
+      data.sort((x, y) => (x.moduleOrder ?? 0) - (y.moduleOrder ?? 0));
+      res.json({ success: true, data });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   public static async getAssignmentById(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { id } = req.params;
@@ -18,11 +71,17 @@ export class AssignmentController {
       if (mongoose.isValidObjectId(id)) {
         assignment = await Assignment.findById(id);
       } else {
-        assignment = (await Assignment.findOne({ slug: id })) || (await Assignment.findOne({ published: true }).sort({ createdAt: 1 }));
+        assignment = await Assignment.findOne({ slug: id });
       }
 
       if (!assignment) {
         res.status(404).json({ success: false, error: 'Assignment not found' });
+        return;
+      }
+
+      const lockedMsg = await ProgressService.lockedMessage(req.user, assignment.moduleId);
+      if (lockedMsg) {
+        res.status(403).json({ success: false, error: lockedMsg, isLocked: true });
         return;
       }
 
@@ -123,11 +182,22 @@ export class AssignmentController {
       if (mongoose.isValidObjectId(id)) {
         assignment = await Assignment.findById(id);
       } else {
-        assignment = (await Assignment.findOne({ slug: id })) || (await Assignment.findOne({ published: true }).sort({ createdAt: 1 }));
+        assignment = await Assignment.findOne({ slug: id });
       }
 
       if (!assignment) {
         res.status(404).json({ success: false, error: 'Assignment not found' });
+        return;
+      }
+
+      const lockedMsg = await ProgressService.lockedMessage(req.user, assignment.moduleId);
+      if (lockedMsg) {
+        res.status(403).json({ success: false, error: lockedMsg, isLocked: true });
+        return;
+      }
+
+      if (!sourceCode || typeof sourceCode !== 'string') {
+        res.status(400).json({ success: false, error: 'Source code is required' });
         return;
       }
 
@@ -157,13 +227,8 @@ export class AssignmentController {
         },
       });
 
-      // Update module progress if passed
-      if (evalResult.passed) {
-        await ProgressService.updateModuleProgress(
-          learnerId.toString(),
-          assignment.moduleId.toString()
-        );
-      }
+      // Recalculate module progress so the module can complete / unlock the next one
+      await ProgressService.updateModuleProgress(learnerId.toString(), assignment.moduleId.toString());
 
       res.status(201).json({
         success: true,
@@ -191,7 +256,7 @@ export class AssignmentController {
 
       let targetAssignmentId = id;
       if (!mongoose.isValidObjectId(id)) {
-        const a = (await Assignment.findOne({ slug: id })) || (await Assignment.findOne({ published: true }));
+        const a = await Assignment.findOne({ slug: id });
         if (a) targetAssignmentId = a._id.toString();
       }
 

@@ -6,9 +6,11 @@ import { AuditLog } from '../models/AuditLog';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 
 export class CourseController {
-  public static async getAllCourses(req: Request, res: Response): Promise<void> {
+  public static async getAllCourses(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const courses = await Course.find({ published: true });
+      // Admins also see unpublished courses so they can publish them again
+      const isAdmin = !!req.user && ['admin', 'superadmin'].includes(req.user.role);
+      const courses = await Course.find(isAdmin ? {} : { published: true }).sort({ createdAt: 1 });
       const coursesWithCounts = await Promise.all(
         courses.map(async (c) => {
           const moduleCount = await Module.countDocuments({ courseId: c._id, published: true });

@@ -5,6 +5,7 @@ import { ApiClient } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { useTheme } from '../../context/ThemeContext';
 import { Breadcrumbs } from '../../components/common/Breadcrumbs';
+import { PageError } from '../../components/common/PageError';
 import {
   Play,
   Send,
@@ -37,6 +38,7 @@ export const CodingAssignmentPage: React.FC = () => {
   const [submitResult, setSubmitResult] = useState<any>(null);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     const fetchAssignment = async () => {
@@ -51,7 +53,7 @@ export const CodingAssignmentPage: React.FC = () => {
           .then(setSubmissions)
           .catch(() => {});
       } catch (err: any) {
-        error(err.message || 'Failed to load assignment');
+        setLoadError(err.message || 'Failed to load assignment');
       } finally {
         setLoading(false);
       }
@@ -124,6 +126,10 @@ export const CodingAssignmentPage: React.FC = () => {
       setIsSubmitting(false);
     }
   };
+
+  if (!loading && !assignment) {
+    return <PageError message={loadError || 'Assignment not found.'} backTo="/courses/go-programming/learning-path" backLabel="Back to Learning Path" />;
+  }
 
   if (loading || !assignment) {
     return (

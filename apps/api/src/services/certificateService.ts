@@ -12,9 +12,12 @@ export class CertificateService {
     courseId: string
   ): Promise<ICertificateDocument> {
     // 1. Check if certificate already exists
-    const existing = await Certificate.findOne({ learnerId, courseId, status: 'valid' });
-    if (existing) {
+    const existing = await Certificate.findOne({ learnerId, courseId });
+    if (existing?.status === 'valid') {
       return existing;
+    }
+    if (existing?.status === 'revoked') {
+      throw new Error('Your certificate for this course was revoked. Please contact an administrator.');
     }
 
     // 2. Validate eligibility
@@ -42,7 +45,7 @@ export class CertificateService {
       margin: 1,
       width: 256,
       color: {
-        dark: '#007D9C',
+        dark: '#5B21B6',
         light: '#FFFFFF',
       },
     });

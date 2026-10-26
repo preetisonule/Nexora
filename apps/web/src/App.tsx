@@ -30,6 +30,7 @@ import { CertificateViewPage } from './pages/learner/CertificateViewPage';
 import { PublicVerifyPage } from './pages/learner/PublicVerifyPage';
 import { SettingsPage } from './pages/learner/SettingsPage';
 import { LearningPathPage } from './pages/learner/LearningPathPage';
+import { CodingPracticePage } from './pages/learner/CodingPracticePage';
 
 // Admin Pages
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
@@ -42,6 +43,7 @@ import { AdminUsersPage } from './pages/admin/AdminUsersPage';
 import { AdminCertificatesPage } from './pages/admin/AdminCertificatesPage';
 import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
 import { AdminAuditLogsPage } from './pages/admin/AdminAuditLogsPage';
+import { AdminProjectsPage } from './pages/admin/AdminProjectsPage';
 
 // 404 Page
 const NotFoundPage: React.FC = () => {
@@ -77,6 +79,7 @@ export const App: React.FC = () => {
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/courses" element={<CourseCatalogPage />} />
                 <Route path="/courses/:slug" element={<CourseDetailPage />} />
+                <Route path="/verify" element={<PublicVerifyPage />} />
                 <Route path="/verify/:certificateId" element={<PublicVerifyPage />} />
 
                 {/* Protected Learner Routes */}
@@ -161,6 +164,14 @@ export const App: React.FC = () => {
                   }
                 />
                 <Route
+                  path="/practice"
+                  element={
+                    <ProtectedRoute>
+                      <CodingPracticePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
                   path="/projects"
                   element={
                     <ProtectedRoute>
@@ -219,6 +230,7 @@ export const App: React.FC = () => {
                 <Route path="assignments" element={<AdminAssignmentsPage />} />
                 <Route path="quizzes" element={<AdminQuizzesPage />} />
                 <Route path="users" element={<AdminUsersPage />} />
+                <Route path="projects" element={<AdminProjectsPage />} />
                 <Route path="certificates" element={<AdminCertificatesPage />} />
                 <Route path="analytics" element={<AdminAnalyticsPage />} />
                 <Route path="audit-logs" element={<AdminAuditLogsPage />} />

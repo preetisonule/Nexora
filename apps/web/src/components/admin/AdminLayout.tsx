@@ -28,6 +28,7 @@ import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import VerifiedUserOutlinedIcon from '@mui/icons-material/VerifiedUserOutlined';
@@ -47,6 +48,7 @@ const navItems = [
   { label: 'Quizzes & Tests', path: '/admin/quizzes', icon: <QuizOutlinedIcon /> },
   { label: 'Assignments', path: '/admin/assignments', icon: <CodeRoundedIcon /> },
   { label: 'User Management', path: '/admin/users', icon: <PeopleAltOutlinedIcon /> },
+  { label: 'Project Reviews', path: '/admin/projects', icon: <RateReviewOutlinedIcon /> },
   { label: 'Certificates', path: '/admin/certificates', icon: <WorkspacePremiumOutlinedIcon /> },
   { label: 'Analytics', path: '/admin/analytics', icon: <InsightsOutlinedIcon /> },
   { label: 'Audit Logs', path: '/admin/audit-logs', icon: <HistoryRoundedIcon /> },

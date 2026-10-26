@@ -126,6 +126,23 @@ export class ProgressService {
   }
 
   /**
+   * Returns an error message when a learner tries to open content of a locked module, otherwise null.
+   * Admins and instructors are never blocked.
+   */
+  public static async lockedMessage(
+    user: { _id: any; role: string } | undefined,
+    moduleId: any
+  ): Promise<string | null> {
+    if (!user || user.role !== 'learner' || !moduleId) return null;
+    const mod = await Module.findById(moduleId);
+    if (!mod) return null;
+    const unlocked = await this.isModuleUnlocked(user._id.toString(), mod);
+    return unlocked
+      ? null
+      : `This belongs to Module ${mod.order} ("${mod.title}"), which is locked. Complete the previous module first.`;
+  }
+
+  /**
    * Evaluates if a module is unlocked for the learner.
    * Module 1 (order 1) is unlocked by default.
    * Subsequent modules unlock when all prerequisite modules are completed.

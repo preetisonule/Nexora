@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ApiClient } from '../../services/api';
 import { Breadcrumbs } from '../../components/common/Breadcrumbs';
+import { SimpleMarkdown } from '../../components/common/SimpleMarkdown';
 import { useToast } from '../../context/ToastContext';
 import {
   BookOpen,
@@ -278,8 +279,8 @@ export const LessonViewPage: React.FC = () => {
             )}
 
             {/* Reading Content */}
-            <div className="text-body text-ink-primary dark:text-ink-darkText leading-relaxed space-y-4 whitespace-pre-line">
-              {lesson.readingContent}
+            <div className="text-body text-ink-primary dark:text-ink-darkText">
+              <SimpleMarkdown text={lesson.readingContent} />
             </div>
 
             {/* Code Examples Component */}

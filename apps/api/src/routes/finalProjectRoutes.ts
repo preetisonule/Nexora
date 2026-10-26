@@ -5,6 +5,7 @@ import { requireRole } from '../middleware/roleMiddleware';
 
 const router = Router();
 
+router.get('/', authenticate, requireRole(['admin', 'superadmin', 'instructor']), FinalProjectController.listSubmissions);
 router.post('/submit', authenticate, FinalProjectController.submitProject);
 router.get('/me', authenticate, FinalProjectController.getMySubmission);
 router.patch('/:id/review', authenticate, requireRole(['admin', 'superadmin', 'instructor']), FinalProjectController.adminReview);

@@ -129,6 +129,45 @@ export class AuthController {
     res.json({ success: true, message: 'Logged out successfully' });
   }
 
+  public static async updateMe(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Not authenticated' });
+        return;
+      }
+      req.user.name = String(req.body.name).trim();
+      await req.user.save();
+      AuthController.getMe(req, res);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  public static async changePassword(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Not authenticated' });
+        return;
+      }
+      const { currentPassword, newPassword } = req.body;
+      const matches = await req.user.comparePassword(currentPassword);
+      if (!matches) {
+        res.status(400).json({ success: false, error: 'Current password is incorrect.' });
+        return;
+      }
+      if (currentPassword === newPassword) {
+        res.status(400).json({ success: false, error: 'New password must be different from the current one.' });
+        return;
+      }
+      const salt = await bcrypt.genSalt(10);
+      req.user.passwordHash = await bcrypt.hash(newPassword, salt);
+      await req.user.save();
+      res.json({ success: true, message: 'Password updated successfully' });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   public static async getMe(req: AuthenticatedRequest, res: Response): Promise<void> {
     if (!req.user) {
       res.status(401).json({ success: false, error: 'Not authenticated' });

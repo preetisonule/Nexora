@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import mongoose from 'mongoose';
 import { Quiz } from '../models/Quiz';
 import { Question } from '../models/Question';
 import { AssessmentAttempt } from '../models/AssessmentAttempt';
@@ -7,12 +8,81 @@ import { ProgressService } from '../services/progressService';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 
 export class QuizController {
+  /** GET /quizzes?moduleId= — quizzes for a module (or all, for admins) with the learner's status. */
+  public static async listQuizzes(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { moduleId } = req.query;
+      const isAdmin = !!req.user && ['admin', 'superadmin', 'instructor'].includes(req.user.role);
+
+      const filter: any = {};
+      if (moduleId) {
+        if (!mongoose.isValidObjectId(moduleId)) {
+          res.json({ success: true, data: [] });
+          return;
+        }
+        filter.moduleId = moduleId;
+      }
+      if (!isAdmin) filter.published = true;
+
+      const quizzes = await Quiz.find(filter).populate('moduleId', 'title order').sort({ createdAt: 1 });
+
+      const data = await Promise.all(
+        quizzes.map(async (quiz) => {
+          const questionCount = await Question.countDocuments({ quizId: quiz._id });
+          let userStats = null;
+          if (req.user) {
+            const attempts = await AssessmentAttempt.find({ learnerId: req.user._id, assessmentId: quiz._id })
+              .sort({ score: -1 })
+              .select('score passed');
+            userStats = {
+              attemptsUsed: attempts.length,
+              bestScore: attempts[0]?.score ?? null,
+              passed: attempts.some((a) => a.passed),
+            };
+          }
+          const mod: any = quiz.moduleId;
+          return {
+            id: quiz._id.toString(),
+            moduleId: mod?._id?.toString() ?? mod?.toString(),
+            moduleTitle: mod?.title,
+            moduleOrder: mod?.order,
+            isModuleTest: quiz.isModuleTest,
+            title: quiz.title,
+            instructions: quiz.instructions,
+            passingScore: quiz.passingScore,
+            maxAttempts: quiz.maxAttempts,
+            timeLimitMinutes: quiz.timeLimitMinutes,
+            published: quiz.published,
+            questionCount,
+            userStats,
+          };
+        })
+      );
+
+      // Sort by module order so admin lists read top to bottom
+      data.sort((a, b) => (a.moduleOrder ?? 0) - (b.moduleOrder ?? 0) || Number(a.isModuleTest) - Number(b.isModuleTest));
+      res.json({ success: true, data });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   public static async getQuizById(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { id } = req.params;
+      if (!mongoose.isValidObjectId(id)) {
+        res.status(404).json({ success: false, error: 'Quiz not found' });
+        return;
+      }
       const quiz = await Quiz.findById(id);
       if (!quiz) {
         res.status(404).json({ success: false, error: 'Quiz not found' });
+        return;
+      }
+
+      const lockedMsg = await ProgressService.lockedMessage(req.user, quiz.moduleId);
+      if (lockedMsg) {
+        res.status(403).json({ success: false, error: lockedMsg, isLocked: true });
         return;
       }
 
@@ -93,9 +163,15 @@ export class QuizController {
         return;
       }
 
-      const quiz = await Quiz.findById(id);
+      const quiz = mongoose.isValidObjectId(id) ? await Quiz.findById(id) : null;
       if (!quiz) {
         res.status(404).json({ success: false, error: 'Quiz not found' });
+        return;
+      }
+
+      const lockedMsg = await ProgressService.lockedMessage(req.user, quiz.moduleId);
+      if (lockedMsg) {
+        res.status(403).json({ success: false, error: lockedMsg, isLocked: true });
         return;
       }
 
@@ -113,30 +189,19 @@ export class QuizController {
         return;
       }
 
-      const { answers } = req.body as {
-        answers: { questionId: string; selectedOptionIds: string[] }[];
+      const { answers = [] } = (req.body || {}) as {
+        answers?: { questionId: string; selectedOptionIds: string[] }[];
       };
+      const answerMap = new Map(answers.map((a) => [a.questionId, a.selectedOptionIds || []]));
 
-      const questions = await Question.find({ quizId: quiz._id });
-      const questionMap = new Map(questions.map((q) => [q._id.toString(), q]));
+      // Score against every question in the quiz, so unanswered questions count as wrong
+      const questions = await Question.find({ quizId: quiz._id }).sort({ order: 1 });
 
       let totalPoints = 0;
       let earnedPoints = 0;
 
-      const questionResults = answers.map((ans) => {
-        const question = questionMap.get(ans.questionId);
-        if (!question) {
-          return {
-            questionId: ans.questionId,
-            isCorrect: false,
-            userAnswers: ans.selectedOptionIds,
-            correctAnswers: [],
-            explanation: '',
-            pointsEarned: 0,
-            maxPoints: 0,
-          };
-        }
-
+      const questionResults = questions.map((question) => {
+        const ans = { questionId: question._id.toString(), selectedOptionIds: answerMap.get(question._id.toString()) || [] };
         totalPoints += question.points;
 
         // Check if selected options match correct answers
@@ -151,7 +216,7 @@ export class QuizController {
         earnedPoints += pointsEarned;
 
         return {
-          questionId: question._id,
+          questionId: question._id.toString(),
           isCorrect,
           userAnswers: ans.selectedOptionIds,
           correctAnswers: question.correctAnswers,
@@ -169,9 +234,9 @@ export class QuizController {
         assessmentId: quiz._id,
         isModuleTest: quiz.isModuleTest,
         moduleId: quiz.moduleId,
-        answers: answers.map((a) => ({
-          questionId: a.questionId,
-          selectedOptionIds: a.selectedOptionIds,
+        answers: questionResults.map((r) => ({
+          questionId: r.questionId,
+          selectedOptionIds: r.userAnswers,
         })),
         score,
         passed,

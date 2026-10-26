@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import { ApiClient } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { Breadcrumbs } from '../../components/common/Breadcrumbs';
+import { PageError } from '../../components/common/PageError';
 import {
   Award,
   Download,
@@ -19,6 +20,7 @@ export const CertificateViewPage: React.FC = () => {
   const { certificateId } = useParams<{ certificateId: string }>();
   const [cert, setCert] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
   const certRef = useRef<HTMLDivElement>(null);
@@ -27,7 +29,7 @@ export const CertificateViewPage: React.FC = () => {
   useEffect(() => {
     ApiClient.get<any>(`/certificates/${certificateId}`)
       .then(setCert)
-      .catch((err) => error(err.message || 'Certificate not found'))
+      .catch((err) => setLoadError(err.message || 'Certificate not found'))
       .finally(() => setLoading(false));
   }, [certificateId]);
 
@@ -66,6 +68,10 @@ export const CertificateViewPage: React.FC = () => {
       setIsDownloading(false);
     }
   };
+
+  if (!loading && !cert) {
+    return <PageError message={loadError || 'Certificate not found.'} backTo="/certificates" backLabel="Back to My Certificates" />;
+  }
 
   if (loading || !cert) {
     return (

@@ -12,14 +12,43 @@ export interface ExecutionOptions {
   timeoutMs?: number;
 }
 
-export class GoExecutionService {
-  private static binaryPath: string = config.go.binaryPath;
+interface ProcessResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut: boolean;
+  spawnError?: string;
+  durationMs: number;
+}
 
+interface CompiledProgram {
+  workDir: string;
+  binaryPath: string;
+}
+
+export class GoExecutionService {
+  private static goBinary: string = config.go.binaryPath;
+
+  /**
+   * Compiles and runs a single Go program with the given stdin.
+   */
   public static async execute(options: ExecutionOptions): Promise<ICodeRunResult> {
     const { code, stdin = '', timeoutMs = config.go.timeoutMs } = options;
+    const [result] = await this.executeWithInputs(code, [stdin], timeoutMs);
+    return result;
+  }
 
+  /**
+   * Compiles the program once, then runs the binary for every stdin input.
+   * Used by the grader so each test case does not recompile the code.
+   */
+  public static async executeWithInputs(
+    code: string,
+    inputs: string[],
+    timeoutMs: number = config.go.timeoutMs
+  ): Promise<ICodeRunResult[]> {
     if (!code || typeof code !== 'string') {
-      return {
+      const empty: ICodeRunResult = {
         stdout: '',
         stderr: 'No Go code provided for execution.',
         exitCode: 1,
@@ -27,143 +56,193 @@ export class GoExecutionService {
         compileError: 'No code provided',
         timedOut: false,
       };
+      return inputs.map(() => empty);
     }
 
-    // Ephemeral directory creation
-    const tempDirName = `compilo-go-${uuidv4()}`;
-    const tempDirPath = path.join(os.tmpdir(), tempDirName);
-    const mainFilePath = path.join(tempDirPath, 'main.go');
-
-    const startTime = Date.now();
+    const workDir = path.join(os.tmpdir(), `compilo-go-${uuidv4()}`);
 
     try {
-      await fs.mkdir(tempDirPath, { recursive: true });
-      await fs.writeFile(mainFilePath, code, 'utf-8');
+      const compiled = await this.compile(code, workDir);
+      if ('compileError' in compiled) {
+        return inputs.map(() => compiled.compileError);
+      }
 
-      return await new Promise<ICodeRunResult>((resolve) => {
-        let stdout = '';
-        let stderr = '';
-        let timedOut = false;
-        let isClosed = false;
-
-        // Spawn isolated go process
-        const child = spawn(this.binaryPath, ['run', 'main.go'], {
-          cwd: tempDirPath,
-          windowsHide: true,
-        });
-
-        // Set timeout killer with process tree kill on Windows
-        const timer = setTimeout(() => {
-          if (!isClosed) {
-            timedOut = true;
-            if (process.platform === 'win32' && child.pid) {
-              exec(`taskkill /pid ${child.pid} /T /F`, () => {});
-            } else {
-              child.kill('SIGKILL');
-            }
-          }
-        }, timeoutMs);
-
-        // Pipe stdin if provided
-        if (stdin) {
-          try {
-            child.stdin.write(stdin);
-            child.stdin.end();
-          } catch {
-            // Ignore
-          }
-        } else {
-          child.stdin.end();
-        }
-
-        // Buffer outputs up to max size
-        child.stdout.on('data', (chunk) => {
-          if (stdout.length + chunk.length <= config.go.maxOutputBytes) {
-            stdout += chunk.toString();
-          } else if (stdout.length < config.go.maxOutputBytes) {
-            stdout += chunk.toString().slice(0, config.go.maxOutputBytes - stdout.length) + '\n[Output truncated...]';
-          }
-        });
-
-        child.stderr.on('data', (chunk) => {
-          if (stderr.length + chunk.length <= config.go.maxOutputBytes) {
-            stderr += chunk.toString();
-          } else if (stderr.length < config.go.maxOutputBytes) {
-            stderr += chunk.toString().slice(0, config.go.maxOutputBytes - stderr.length) + '\n[Error output truncated...]';
-          }
-        });
-
-        child.on('error', (err) => {
-          isClosed = true;
-          clearTimeout(timer);
-          const executionTimeMs = Date.now() - startTime;
-          resolve({
-            stdout: '',
-            stderr: `Compiler process error: ${err.message}`,
-            exitCode: -1,
-            executionTimeMs,
-            compileError: err.message,
-            timedOut: false,
-          });
-        });
-
-        child.on('close', (code) => {
-          isClosed = true;
-          clearTimeout(timer);
-          const executionTimeMs = Date.now() - startTime;
-
-          // Parse compile or runtime error
-          let compileError: string | undefined;
-          let runtimeError: string | undefined;
-
-          // Normalize error paths for clean user display
-          const cleanedStderr = stderr
-            .replace(new RegExp(mainFilePath.replace(/\\/g, '\\\\'), 'g'), 'main.go')
-            .replace(new RegExp(tempDirPath.replace(/\\/g, '\\\\'), 'g'), '');
-
-          if (timedOut) {
-            runtimeError = `Time Limit Exceeded: Execution took longer than ${timeoutMs}ms limit.`;
-          } else if (code !== 0) {
-            if (
-              cleanedStderr.includes('syntax error') ||
-              cleanedStderr.includes('undefined:') ||
-              cleanedStderr.includes('imported and not used') ||
-              cleanedStderr.includes('expected') ||
-              cleanedStderr.includes('cannot use')
-            ) {
-              compileError = cleanedStderr;
-            } else {
-              runtimeError = cleanedStderr || `Process exited with error code ${code}`;
-            }
-          }
-
-          resolve({
-            stdout,
-            stderr: cleanedStderr,
-            exitCode: timedOut ? 124 : (code ?? -1),
-            executionTimeMs,
-            compileError,
-            runtimeError,
-            timedOut,
-          });
-        });
-      });
+      const results: ICodeRunResult[] = [];
+      for (const stdin of inputs) {
+        results.push(await this.runBinary(compiled, stdin, timeoutMs));
+      }
+      return results;
     } catch (err: any) {
-      return {
+      const failure: ICodeRunResult = {
         stdout: '',
         stderr: `Execution workspace setup error: ${err.message}`,
         exitCode: 1,
-        executionTimeMs: Date.now() - startTime,
+        executionTimeMs: 0,
         compileError: err.message,
         timedOut: false,
       };
+      return inputs.map(() => failure);
     } finally {
       // Ephemeral workspace cleanup
       try {
-        await fs.rm(tempDirPath, { recursive: true, force: true });
+        await fs.rm(workDir, { recursive: true, force: true });
       } catch {
-        // Silently continue if OS locks temporary cleanup briefly
+        // Silently continue if the OS briefly locks the folder
       }
     }
+  }
+
+  /** Writes main.go and builds it with `go build`. Build failures are reported as compile errors. */
+  private static async compile(
+    code: string,
+    workDir: string
+  ): Promise<CompiledProgram | { compileError: ICodeRunResult }> {
+    await fs.mkdir(workDir, { recursive: true });
+    await fs.writeFile(path.join(workDir, 'main.go'), code, 'utf-8');
+
+    const binaryName = process.platform === 'win32' ? 'program.exe' : 'program';
+    const build = await this.runProcess(
+      this.goBinary,
+      ['build', '-o', binaryName, 'main.go'],
+      workDir,
+      '',
+      config.go.compileTimeoutMs
+    );
+
+    if (build.spawnError) {
+      return {
+        compileError: {
+          stdout: '',
+          stderr: `Could not start the Go compiler (${build.spawnError}). Check GO_BINARY_PATH in apps/api/.env.`,
+          exitCode: -1,
+          executionTimeMs: build.durationMs,
+          compileError: build.spawnError,
+          timedOut: false,
+        },
+      };
+    }
+
+    if (build.timedOut || build.exitCode !== 0) {
+      const message = build.timedOut
+        ? `Compilation took longer than ${config.go.compileTimeoutMs}ms.`
+        : this.cleanPaths(build.stderr, workDir) || 'Compilation failed.';
+      return {
+        compileError: {
+          stdout: '',
+          stderr: message,
+          exitCode: build.exitCode || 1,
+          executionTimeMs: build.durationMs,
+          compileError: message,
+          timedOut: false,
+        },
+      };
+    }
+
+    return { workDir, binaryPath: path.join(workDir, binaryName) };
+  }
+
+  /** Runs the compiled binary with a time limit. */
+  private static async runBinary(
+    program: CompiledProgram,
+    stdin: string,
+    timeoutMs: number
+  ): Promise<ICodeRunResult> {
+    const run = await this.runProcess(program.binaryPath, [], program.workDir, stdin, timeoutMs);
+    const stderr = this.cleanPaths(run.stderr, program.workDir);
+
+    let runtimeError: string | undefined;
+    if (run.timedOut) {
+      runtimeError = `Time Limit Exceeded: Execution took longer than ${timeoutMs}ms limit.`;
+    } else if (run.spawnError) {
+      runtimeError = run.spawnError;
+    } else if (run.exitCode !== 0) {
+      runtimeError = stderr || `Process exited with error code ${run.exitCode}`;
+    }
+
+    return {
+      stdout: run.stdout,
+      stderr,
+      exitCode: run.timedOut ? 124 : run.exitCode,
+      executionTimeMs: run.durationMs,
+      runtimeError,
+      timedOut: run.timedOut,
+    };
+  }
+
+  /** Spawns a process, pipes stdin, buffers output up to the configured limit and kills it on timeout. */
+  private static runProcess(
+    command: string,
+    args: string[],
+    cwd: string,
+    stdin: string,
+    timeoutMs: number
+  ): Promise<ProcessResult> {
+    const startTime = Date.now();
+    const maxBytes = config.go.maxOutputBytes;
+
+    return new Promise<ProcessResult>((resolve) => {
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
+      let finished = false;
+
+      const child = spawn(command, args, { cwd, windowsHide: true });
+
+      const timer = setTimeout(() => {
+        if (finished) return;
+        timedOut = true;
+        if (process.platform === 'win32' && child.pid) {
+          exec(`taskkill /pid ${child.pid} /T /F`, () => {});
+        } else {
+          child.kill('SIGKILL');
+        }
+      }, timeoutMs);
+
+      const append = (current: string, chunk: Buffer, label: string) => {
+        if (current.length >= maxBytes) return current;
+        const text = chunk.toString();
+        if (current.length + text.length <= maxBytes) return current + text;
+        return current + text.slice(0, maxBytes - current.length) + `\n[${label} truncated...]`;
+      };
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout = append(stdout, chunk, 'Output');
+      });
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr = append(stderr, chunk, 'Error output');
+      });
+
+      // Ignore EPIPE when the program exits without reading stdin
+      child.stdin.on('error', () => {});
+      child.stdin.end(stdin || '');
+
+      child.on('error', (err) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        resolve({ stdout: '', stderr: '', exitCode: -1, timedOut: false, spawnError: err.message, durationMs: Date.now() - startTime });
+      });
+
+      child.on('close', (code) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        resolve({ stdout, stderr, exitCode: code ?? -1, timedOut, durationMs: Date.now() - startTime });
+      });
+    });
+  }
+
+  /** Removes temporary folder paths from compiler / runtime messages. */
+  private static cleanPaths(text: string, workDir: string): string {
+    const escape = (p: string) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Go prints Windows paths with either separator, so strip both spellings
+    const variants = [workDir, workDir.replace(/\\/g, '/')];
+    let cleaned = text;
+    for (const dir of variants) {
+      cleaned = cleaned
+        .replace(new RegExp(escape(dir) + '[\\\\/]', 'g'), '')
+        .replace(new RegExp(escape(dir), 'g'), '');
+    }
+    return cleaned.replace(/^# command-line-arguments\r?\n/m, '');
   }
 }

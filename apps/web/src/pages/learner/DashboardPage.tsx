@@ -167,11 +167,11 @@ export const DashboardPage: React.FC = () => {
           )}
 
           <Link
-            to="/learn/go-programming/assignment/default-assignment"
+            to="/practice"
             className="btn-secondary py-2.5 px-4 text-xs"
           >
             <Code2 className="w-3.5 h-3.5 mr-1.5" />
-            Open Coding Sandbox
+            Coding Practice
           </Link>
         </div>
       </div>

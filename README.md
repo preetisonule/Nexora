@@ -31,15 +31,17 @@ This is a **college mini project** built with the MERN stack (MongoDB, Express, 
 - **Account system** — register, sign in, sign out, forgot / reset password (JWT stored in an HTTP-only cookie).
 - **Course catalog** — search courses and filter by level.
 - **10-module Go course** with ~60 lessons: from installing Go to generics, testing and concurrency.
-- **Lesson viewer** — explanations, runnable code examples, common mistakes and knowledge checks.
+- **Lesson viewer** — formatted explanations, runnable code examples, common mistakes and knowledge checks.
 - **Coding workspace** — Monaco code editor (the VS Code editor) with custom stdin, **Run** and **Submit** buttons.
-- **Real Go compiler** — code is compiled and executed on the server with `go run` inside a temporary folder with a time limit.
+- **Coding Practice page** — every coding assignment grouped by module, with locked / solved status.
+- **Real Go compiler** — code is compiled once with `go build` in a temporary folder, then the program runs with a time limit.
 - **Automatic grading** — submissions are checked against visible and hidden test cases.
 - **Quizzes & module assessments** — multiple-choice tests with a 70% pass mark and attempt history.
 - **Sequential learning path** — Module 1 is open; each next module unlocks only after the previous one is completed.
 - **Progress dashboard** — "continue learning" card, overall %, completed lessons, assessments and assignments.
-- **Capstone project** — submit the *CLI Task Manager* final project (repository link + notes) for review.
+- **Capstone project** — submit the *CLI Task Manager* final project (repository link + documentation) for admin review; resubmit if it is rejected.
 - **Certificates** — claim a certificate after finishing the course, download it as PDF, and share a **public verification page** with a QR code.
+- **Account settings** — change your display name and password.
 - **Light / dark mode** toggle, saved in the browser.
 - **Responsive design** — works on phones, tablets and desktops.
 
@@ -48,6 +50,7 @@ This is a **college mini project** built with the MERN stack (MongoDB, Express, 
 - **Dashboard metrics** — total learners, enrollments, submissions, certificates.
 - **Content management** — courses, modules, lessons, quizzes / questions, coding assignments / test cases.
 - **User management** — change user roles and suspend / activate accounts.
+- **Project reviews** — approve or reject capstone submissions with a score and feedback (approval is required before a learner can claim a certificate).
 - **Certificate management** — view all issued certificates and revoke them.
 - **Analytics** — charts built with Recharts.
 - **Audit logs** — record of important admin actions.
@@ -57,6 +60,7 @@ This is a **college mini project** built with the MERN stack (MongoDB, Express, 
 - **JWT** authentication in HTTP-only cookies.
 - **Helmet** security headers, **CORS** restricted to the frontend URL.
 - **Rate limiting** on authentication routes.
+- **Module locks enforced on the server** — lessons, quizzes and coding assignments of a locked module cannot be opened or submitted.
 - Request validation with **Zod** schemas shared between frontend and backend.
 - Role-based route protection on both client and server.
 
@@ -114,7 +118,7 @@ The MUI theme lives in [`apps/web/src/theme.ts`](apps/web/src/theme.ts) and supp
 | Frontend | React 18, TypeScript, Vite, **Material UI 6** (+ MUI Icons, Emotion), Tailwind CSS (older pages), React Router 6, React Hook Form, Zod, Monaco Editor, Recharts, jsPDF + html2canvas, canvas-confetti |
 | Backend | Node.js, Express 4, TypeScript, Mongoose 8, JWT, bcryptjs, Helmet, express-rate-limit, cookie-parser, qrcode, uuid |
 | Database | MongoDB |
-| Code runner | Go toolchain (`go run`) executed by the backend |
+| Code runner | Go toolchain (`go build` + run) executed by the backend |
 | Shared | `@compilo/shared` package with TypeScript types and Zod schemas |
 | Testing | Vitest |
 | Tooling | npm workspaces (monorepo) |
@@ -191,7 +195,8 @@ cp .env.example apps/api/.env
 | `FRONTEND_URL` | Allowed CORS origin | `http://localhost:5173` |
 | `ADMIN_NAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Admin account created by the seed script | see `.env.example` |
 | `GO_BINARY_PATH` | Full path to `go` executable | `C:\Program Files\Go\bin\go.exe` |
-| `GO_EXECUTION_TIMEOUT_MS` | Max run time for learner code | `6000` |
+| `GO_EXECUTION_TIMEOUT_MS` | Max run time of the learner's program (compile time not included) | `6000` |
+| `GO_COMPILE_TIMEOUT_MS` | Max time for `go build` | `60000` |
 | `MAX_OUTPUT_BUFFER_BYTES` | Max captured output | `65536` |
 
 ### 3. Seed the database
@@ -239,6 +244,7 @@ On the login page you can also click **"Auto-fill Demo Admin Credentials"**. Lea
 | `/login`, `/register`, `/forgot-password` | Authentication |
 | `/courses` | Course catalog |
 | `/courses/:slug` | Course details & syllabus |
+| `/verify` | Certificate lookup (enter an ID) |
 | `/verify/:certificateId` | Public certificate verification |
 
 ### Learner (login required)
@@ -250,12 +256,13 @@ On the login page you can also click **"Auto-fill Demo Admin Credentials"**. Lea
 | `/learn/:courseSlug/lesson/:lessonId` | Lesson viewer |
 | `/learn/:courseSlug/assignment/:assignmentId` | Coding assignment (Monaco editor) |
 | `/learn/:courseSlug/assessment/:assessmentId` | Quiz / module test |
+| `/practice` | Coding Practice — all assignments with status |
 | `/projects` | Capstone project submission |
 | `/certificates`, `/certificates/:certificateId` | My certificates & certificate view |
 | `/settings` | Account settings |
 
 ### Admin (`admin` / `superadmin`)
-`/admin/dashboard`, `/admin/courses`, `/admin/modules`, `/admin/lessons`, `/admin/quizzes`, `/admin/assignments`, `/admin/users`, `/admin/certificates`, `/admin/analytics`, `/admin/audit-logs`
+`/admin/dashboard`, `/admin/courses`, `/admin/modules`, `/admin/lessons`, `/admin/quizzes`, `/admin/assignments`, `/admin/users`, `/admin/projects` (Project Reviews), `/admin/certificates`, `/admin/analytics`, `/admin/audit-logs`
 
 ---
 
@@ -271,20 +278,24 @@ Base URL: `http://localhost:5000/api/v1` · Health check: `GET /api/health`
 | | `POST /auth/login` | Sign in (sets cookie) |
 | | `POST /auth/logout` | Sign out |
 | | `GET /auth/me` 🔒 | Current user |
+| | `PATCH /auth/me` 🔒 | Update display name |
+| | `POST /auth/change-password` 🔒 | Change password (needs current password) |
 | | `POST /auth/forgot-password` | Generate reset token |
 | | `POST /auth/reset-password` | Set new password |
-| **Courses** | `GET /courses`, `GET /courses/:slug` | List / get course |
+| **Courses** | `GET /courses`, `GET /courses/:slug` | List / get course (admins also see unpublished) |
 | | `POST`, `PATCH /:id`, `DELETE /:id` 🛡️ | Manage courses |
 | **Modules** | `GET /modules`, `GET /modules/:id` | List / get modules (with lock state) |
 | | `POST`, `PATCH /reorder`, `PATCH /:id`, `DELETE /:id` 🛡️ | Manage modules |
 | **Lessons** | `GET /lessons/:id` 🔒 | Get lesson |
 | | `POST /lessons/:id/complete` 🔒 | Mark lesson complete |
 | | `POST`, `PATCH /:id`, `DELETE /:id` 🛡️ | Manage lessons |
-| **Quizzes** | `GET /quizzes/:id` 🔒 | Get quiz |
+| **Quizzes** | `GET /quizzes?moduleId=` | List quizzes of a module (with your best score when logged in) |
+| | `GET /quizzes/:id` 🔒 | Get quiz |
 | | `POST /quizzes/:id/attempts` 🔒 | Submit attempt |
 | | `GET /quizzes/attempts/:id/results` 🔒 | Attempt results |
 | | `POST/PATCH/DELETE` quizzes & `/questions` 🛡️ | Manage quizzes and questions |
-| **Assignments** | `GET /assignments/:id` 🔒 | Get assignment |
+| **Assignments** | `GET /assignments?moduleId=` | List coding assignments (with your status when logged in) |
+| | `GET /assignments/:id` 🔒 | Get assignment |
 | | `POST /assignments/run` 🔒 | Run Go code with stdin |
 | | `POST /assignments/:id/submit` 🔒 | Submit & auto-grade |
 | | `GET /assignments/:id/submissions` 🔒 | Submission history |
@@ -295,9 +306,10 @@ Base URL: `http://localhost:5000/api/v1` · Health check: `GET /api/health`
 | | `POST /certificates/claim` 🔒 | Claim certificate |
 | | `GET /certificates/:certificateId` | Certificate details |
 | | `GET /certificates/:certificateId/verify` | Public verification |
-| **Projects** | `POST /projects/submit` 🔒 | Submit capstone |
+| **Projects** | `GET /projects` 🛡️ | All capstone submissions (pending first) |
+| | `POST /projects/submit` 🔒 | Submit capstone |
 | | `GET /projects/me` 🔒 | My submission |
-| | `PATCH /projects/:id/review` 🛡️ | Review submission |
+| | `PATCH /projects/:id/review` 🛡️ | Approve / reject with score and notes |
 | **Admin** | `GET /admin/metrics` 🛡️ | Dashboard metrics |
 | | `GET /admin/users`, `PATCH /admin/users/:id/role`, `PATCH /admin/users/:id/status` 🛡️ | User management |
 | | `GET /admin/certificates`, `PATCH /admin/certificates/:id/revoke` 🛡️ | Certificate management |
@@ -332,14 +344,14 @@ All responses use the format `{ "success": true, "data": ... }` or `{ "success":
 1. A new learner starts with **Module 1 unlocked**; all others are locked.
 2. Inside a module the learner completes **lessons**, passes **quizzes**, solves **coding assignments** and passes the **module test** (≥ 70%).
 3. When a module's completion rules are met, the **next module unlocks**.
-4. After all 10 modules, the learner submits the **CLI Task Manager capstone project**.
-5. Once eligible, the learner **claims a certificate** with a unique ID like `COMPILO-GO-2026-XXXXX`, which anyone can verify at `/verify/:certificateId`.
+4. The learner submits the **CLI Task Manager capstone project**; an admin approves it on the **Project Reviews** page.
+5. Once all 10 modules are complete and the project is approved, the learner **claims a certificate** with a unique ID like `COMPILO-GO-2026-XXXXX`, which anyone can verify at `/verify`. If an admin revokes it, the verify page shows it as revoked.
 
 ### How code execution works
 1. The learner's code is sent to `POST /assignments/run` or `/assignments/:id/submit`.
-2. The backend writes it to a temporary folder as `main.go` and runs it with the Go toolchain.
-3. Stdin is passed in, stdout / stderr are captured, and the process is killed if it exceeds `GO_EXECUTION_TIMEOUT_MS`.
-4. For submissions, output is compared with every test case and a score is saved.
+2. The backend writes it to a temporary folder as `main.go` and compiles it **once** with `go build` (a build error is shown as a compile error).
+3. The compiled program runs with the given stdin; stdout / stderr are captured and the program is stopped if it runs longer than `GO_EXECUTION_TIMEOUT_MS`.
+4. For submissions, the same compiled program runs once per test case, output is compared with the expected output, and a score is saved. The module's progress is then recalculated.
 5. The temporary folder is deleted.
 
 ---

@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { QuizController } from '../controllers/quizController';
-import { authenticate } from '../middleware/authMiddleware';
+import { authenticate, optionalAuth } from '../middleware/authMiddleware';
 import { requireRole } from '../middleware/roleMiddleware';
 
 const router = Router();
 
+router.get('/', optionalAuth, QuizController.listQuizzes);
+router.get('/attempts/:id/results', authenticate, QuizController.getAttemptResults);
 router.get('/:id', authenticate, QuizController.getQuizById);
 router.post('/:id/attempts', authenticate, QuizController.submitAttempt);
-router.get('/attempts/:id/results', authenticate, QuizController.getAttemptResults);
 
 // Admin
 router.post('/', authenticate, requireRole(['admin', 'superadmin']), QuizController.createQuiz);

@@ -18,7 +18,7 @@ const columns = [
     links: [
       { label: 'Dashboard', to: '/dashboard' },
       { label: 'My Certificates', to: '/certificates' },
-      { label: 'Verify a Certificate', to: '/verify/COMPILO-GO-2026-DEMO' },
+      { label: 'Verify a Certificate', to: '/verify' },
       { label: 'Account Settings', to: '/settings' },
     ],
   },

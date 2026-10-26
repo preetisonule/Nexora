@@ -58,14 +58,17 @@ export class TestEvaluationService {
     let totalPoints = 0;
     let earnedPoints = 0;
 
-    for (const testCase of testCases) {
+    // Compile once, then run the binary for every test case input
+    const runResults = await GoExecutionService.executeWithInputs(
+      sourceCode,
+      testCases.map((tc) => tc.input || '')
+    );
+
+    for (let i = 0; i < testCases.length; i++) {
+      const testCase = testCases[i];
+      const runResult = runResults[i];
       const points = testCase.points || 10;
       totalPoints += points;
-
-      const runResult = await GoExecutionService.execute({
-        code: sourceCode,
-        stdin: testCase.input,
-      });
 
       totalExecutionTimeMs += runResult.executionTimeMs;
 

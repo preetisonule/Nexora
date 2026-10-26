@@ -1,4 +1,6 @@
 import { Response } from 'express';
+import mongoose from 'mongoose';
+import { LessonProgress } from '../models/LessonProgress';
 import { Module } from '../models/Module';
 import { Lesson } from '../models/Lesson';
 import { Course } from '../models/Course';
@@ -94,23 +96,24 @@ export class ModuleController {
   public static async getModuleById(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const mod = await Module.findById(id);
+      const mod = mongoose.isValidObjectId(id) ? await Module.findById(id) : null;
       if (!mod) {
         res.status(404).json({ success: false, error: 'Module not found' });
         return;
       }
 
-      // Check access permission for learner
+      // Progress for the logged-in user (admins are never locked)
       let isUnlocked = true;
       let isCompleted = false;
+      let progress: any = null;
+      let completedLessonIds: string[] = [];
 
-      if (req.user && req.user.role === 'learner') {
-        const modProgress = await ProgressService.updateModuleProgress(
-          req.user._id.toString(),
-          mod._id.toString()
-        );
-        isUnlocked = modProgress.unlocked;
-        isCompleted = modProgress.completed;
+      if (req.user) {
+        progress = await ProgressService.updateModuleProgress(req.user._id.toString(), mod._id.toString());
+        isCompleted = progress.completed;
+        if (req.user.role === 'learner') isUnlocked = progress.unlocked;
+        const done = await LessonProgress.find({ learnerId: req.user._id, moduleId: mod._id, completed: true }).select('lessonId');
+        completedLessonIds = done.map((d) => d.lessonId.toString());
       }
 
       const lessons = await Lesson.find({ moduleId: mod._id, published: true })
@@ -133,6 +136,8 @@ export class ModuleController {
           published: mod.published,
           unlocked: isUnlocked,
           completed: isCompleted,
+          progress,
+          completedLessonIds,
           lessons: lessons.map((l) => ({
             id: l._id.toString(),
             moduleId: mod._id.toString(),

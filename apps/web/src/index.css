@@ -24,6 +24,12 @@
   }
 }
 
+/* Show operators like >= and := exactly as typed in code */
+pre, code, kbd, samp, .monaco-editor {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

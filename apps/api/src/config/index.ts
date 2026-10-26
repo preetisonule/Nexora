@@ -19,6 +19,7 @@ export const config = {
   go: {
     binaryPath: process.env.GO_BINARY_PATH || 'C:\\Program Files\\Go\\bin\\go.exe',
     timeoutMs: parseInt(process.env.GO_EXECUTION_TIMEOUT_MS || '10000', 10),
+    compileTimeoutMs: parseInt(process.env.GO_COMPILE_TIMEOUT_MS || '60000', 10),
     maxOutputBytes: parseInt(process.env.MAX_OUTPUT_BUFFER_BYTES || '65536', 10),
   },
 };

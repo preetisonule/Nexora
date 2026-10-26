@@ -18,17 +18,20 @@ export const CertificatesPage: React.FC = () => {
   const [certificates, setCertificates] = useState<any[]>([]);
   const [progress, setProgress] = useState<any>(null);
   const [claiming, setClaiming] = useState(false);
+  const [projectStatus, setProjectStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { success, error } = useToast();
 
   const loadData = async () => {
     try {
-      const [certs, prog] = await Promise.all([
+      const [certs, prog, project] = await Promise.all([
         ApiClient.get<any[]>('/certificates/me'),
         ApiClient.get<any>('/progress/me'),
+        ApiClient.get<any>('/projects/me').catch(() => null),
       ]);
       setCertificates(certs || []);
       setProgress(prog);
+      setProjectStatus(project?.status || null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -63,6 +66,9 @@ export const CertificatesPage: React.FC = () => {
   }
 
   const isEligible = progress?.certificateEligible;
+  const modulesDone = progress?.completedModulesCount || 0;
+  const totalModules = progress?.totalModulesCount || 10;
+  const testsPassed = (progress?.modulesProgress || []).filter((m: any) => m.moduleTestPassed).length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10 pb-24">
@@ -125,26 +131,28 @@ export const CertificatesPage: React.FC = () => {
           <div className="flex items-center gap-2">
             <CheckCircle2
               className={`w-4 h-4 ${
-                progress?.completedModulesCount >= 10 ? 'text-emerald-600' : 'text-slate-300'
+                modulesDone >= totalModules ? 'text-emerald-600' : 'text-slate-300'
               }`}
             />
-            <span>10 Modules Complete ({progress?.completedModulesCount || 0}/10)</span>
+            <span>{totalModules} Modules Complete ({modulesDone}/{totalModules})</span>
           </div>
 
           <div className="flex items-center gap-2">
             <CheckCircle2
               className={`w-4 h-4 ${
-                progress?.overallPercentage >= 100 ? 'text-emerald-600' : 'text-slate-300'
+                testsPassed >= totalModules ? 'text-emerald-600' : 'text-slate-300'
               }`}
             />
-            <span>All Module Tests Passed</span>
+            <span>Module Tests Passed ({testsPassed}/{totalModules})</span>
           </div>
 
           <div className="flex items-center gap-2">
             <CheckCircle2
-              className={`w-4 h-4 ${isEligible ? 'text-emerald-600' : 'text-slate-300'}`}
+              className={`w-4 h-4 ${projectStatus === 'approved' ? 'text-emerald-600' : 'text-slate-300'}`}
             />
-            <span>Capstone Project Approved</span>
+            <span>
+              Capstone Project {projectStatus === 'approved' ? 'Approved' : projectStatus === 'pending' ? 'Awaiting Review' : projectStatus === 'rejected' ? 'Needs Changes' : 'Not Submitted'}
+            </span>
           </div>
         </div>
       </div>

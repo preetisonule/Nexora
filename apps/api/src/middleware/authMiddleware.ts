@@ -38,3 +38,30 @@ export const authenticate = async (
     res.status(401).json({ success: false, error: 'Invalid or expired session token.' });
   }
 };
+
+/**
+ * Attaches req.user when a valid session exists, but never rejects the request.
+ * Used on public routes that show extra data (progress, unpublished items) to logged-in users.
+ */
+export const optionalAuth = async (
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    let token = req.cookies?.compilo_token;
+    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+    if (token) {
+      const decoded = jwt.verify(token, config.jwtSecret) as { id: string };
+      const user = await User.findById(decoded.id);
+      if (user && user.status !== 'suspended') {
+        req.user = user;
+      }
+    }
+  } catch {
+    // Invalid token: continue as an anonymous visitor
+  }
+  next();
+};

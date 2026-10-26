@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import mongoose from 'mongoose';
 import { Lesson } from '../models/Lesson';
 import { Module } from '../models/Module';
 import { LessonProgress } from '../models/LessonProgress';
@@ -10,7 +11,7 @@ export class LessonController {
   public static async getLessonById(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const lesson = await Lesson.findById(id);
+      const lesson = mongoose.isValidObjectId(id) ? await Lesson.findById(id) : null;
       if (!lesson) {
         res.status(404).json({ success: false, error: 'Lesson not found' });
         return;

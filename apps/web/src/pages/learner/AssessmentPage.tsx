@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ApiClient } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { Breadcrumbs } from '../../components/common/Breadcrumbs';
+import { PageError } from '../../components/common/PageError';
 import {
   HelpCircle,
   CheckCircle2,
@@ -25,6 +26,7 @@ export const AssessmentPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     const fetchQuiz = async () => {
@@ -32,7 +34,7 @@ export const AssessmentPage: React.FC = () => {
         const data = await ApiClient.get<any>(`/quizzes/${assessmentId}`);
         setQuiz(data);
       } catch (err: any) {
-        error(err.message || 'Failed to load assessment');
+        setLoadError(err.message || 'Failed to load assessment');
       } finally {
         setLoading(false);
       }
@@ -83,6 +85,20 @@ export const AssessmentPage: React.FC = () => {
 
       const res = await ApiClient.post<any>(`/quizzes/${assessmentId}/attempts`, payload);
       setResult(res);
+      // Keep the attempts counter in the header in sync with the server
+      setQuiz((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              userStats: {
+                ...(prev.userStats || {}),
+                attemptsUsed: res.attemptNumber,
+                attemptsRemaining: res.attemptsRemaining,
+                passed: prev.userStats?.passed || res.passed,
+              },
+            }
+          : prev
+      );
 
       if (res.passed) {
         success(`Assessment passed! Score: ${res.score}%`);
@@ -100,6 +116,13 @@ export const AssessmentPage: React.FC = () => {
     setSelectedAnswers({});
     setResult(null);
   };
+
+  if (!loading && !quiz) {
+    return <PageError message={loadError || 'Assessment not found.'} backTo="/courses/go-programming/learning-path" backLabel="Back to Learning Path" />;
+  }
+
+  const noAttemptsLeft =
+    !!quiz?.userStats && quiz.maxAttempts > 0 && quiz.userStats.attemptsUsed >= quiz.maxAttempts;
 
   if (loading || !quiz) {
     return (
@@ -308,9 +331,17 @@ export const AssessmentPage: React.FC = () => {
             );
           })}
 
+          {noAttemptsLeft && (
+            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs">
+              You have used all {quiz.maxAttempts} attempts for this assessment
+              {quiz.userStats?.bestScore != null ? ` (best score ${quiz.userStats.bestScore}%)` : ''}. Ask an admin
+              if you need another try.
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || noAttemptsLeft}
             className="w-full py-3 rounded-xl font-bold text-sm bg-brand-600 hover:bg-brand-700 text-white shadow-elevated flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
           >
             <Send className="w-4 h-4" />

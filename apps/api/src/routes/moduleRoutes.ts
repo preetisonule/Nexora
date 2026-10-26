@@ -1,22 +1,13 @@
 import { Router } from 'express';
 import { ModuleController } from '../controllers/moduleController';
-import { authenticate } from '../middleware/authMiddleware';
+import { authenticate, optionalAuth } from '../middleware/authMiddleware';
 import { requireRole } from '../middleware/roleMiddleware';
 
 const router = Router();
 
-// Optional authentication to calculate unlock states for logged in users
-router.get('/', (req, res, next) => {
-  authenticate(req, res, () => {
-    ModuleController.getModules(req, res);
-  }).catch(() => ModuleController.getModules(req, res));
-});
-
-router.get('/:id', (req, res, next) => {
-  authenticate(req, res, () => {
-    ModuleController.getModuleById(req, res);
-  }).catch(() => ModuleController.getModuleById(req, res));
-});
+// Optional authentication: logged-in users also get their unlock / progress state
+router.get('/', optionalAuth, ModuleController.getModules);
+router.get('/:id', optionalAuth, ModuleController.getModuleById);
 
 router.post('/', authenticate, requireRole(['admin', 'superadmin']), ModuleController.createModule);
 router.patch('/reorder', authenticate, requireRole(['admin', 'superadmin']), ModuleController.reorderModules);

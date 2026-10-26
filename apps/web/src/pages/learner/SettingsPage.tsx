@@ -1,108 +1,170 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { changePasswordSchema, ChangePasswordInput, updateProfileSchema, UpdateProfileInput } from '@compilo/shared';
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Container,
+  Divider,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
+import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
+import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useToast } from '../../context/ToastContext';
+import { ApiClient } from '../../services/api';
 import { Breadcrumbs } from '../../components/common/Breadcrumbs';
-import { User, ShieldCheck, Sun, Moon, KeyRound, Save } from 'lucide-react';
+
+const SectionTitle: React.FC<{ icon: React.ReactNode; title: string; subtitle: string }> = ({ icon, title, subtitle }) => (
+  <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+    <Box sx={{ color: 'primary.main', display: 'flex' }}>{icon}</Box>
+    <Box>
+      <Typography variant="h6" lineHeight={1.2}>{title}</Typography>
+      <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
+    </Box>
+  </Stack>
+);
 
 export const SettingsPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { success } = useToast();
+  const { success, error } = useToast();
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    success('Settings updated successfully.');
+  const profileForm = useForm<UpdateProfileInput>({
+    resolver: zodResolver(updateProfileSchema),
+    defaultValues: { name: user?.name || '' },
+  });
+  const passwordForm = useForm<ChangePasswordInput>({
+    resolver: zodResolver(changePasswordSchema),
+    defaultValues: { currentPassword: '', newPassword: '' },
+  });
+
+  useEffect(() => {
+    if (user) profileForm.reset({ name: user.name });
+  }, [user?.name]);
+
+  const saveProfile = async (data: UpdateProfileInput) => {
+    try {
+      await ApiClient.patch('/auth/me', data);
+      await refreshUser();
+      success('Profile updated.');
+    } catch (err: any) {
+      error(err.message || 'Could not update profile');
+    }
+  };
+
+  const savePassword = async (data: ChangePasswordInput) => {
+    try {
+      await ApiClient.post('/auth/change-password', data);
+      passwordForm.reset();
+      success('Password changed. Use the new password next time you sign in.');
+    } catch (err: any) {
+      error(err.message || 'Could not change password');
+    }
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-8 pb-24">
+    <Container maxWidth="md" sx={{ py: 4, pb: 10 }}>
       <Breadcrumbs items={[{ label: 'Settings' }]} />
+      <Typography variant="h4" sx={{ mt: 2 }}>Account Settings</Typography>
+      <Typography color="text.secondary" sx={{ mb: 3 }}>
+        Manage your profile, password and appearance.
+      </Typography>
 
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-          Account Settings
-        </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Manage your profile information and platform preferences.
-        </p>
-      </div>
-
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-card p-8 space-y-6">
-        <form onSubmit={handleSave} className="space-y-6">
-          {/* Profile Section */}
-          <div className="space-y-4">
-            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <User className="w-4 h-4 text-brand-600" />
-              Profile Details
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  defaultValue={user?.name}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+      <Stack spacing={3}>
+        <Card>
+          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+            <SectionTitle icon={<PersonOutlineRoundedIcon />} title="Profile" subtitle="Your name appears on certificates." />
+            <Stack component="form" spacing={2.5} onSubmit={profileForm.handleSubmit(saveProfile)} noValidate>
+              <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
+                <TextField
+                  label="Full Name"
+                  {...profileForm.register('name')}
+                  error={!!profileForm.formState.errors.name}
+                  helperText={profileForm.formState.errors.name?.message}
+                  slotProps={{ inputLabel: { shrink: true } }}
                 />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Email Address
-                </label>
-                <input
-                  type="email"
+                <TextField
+                  label="Email Address"
+                  value={user?.email || ''}
                   disabled
-                  defaultValue={user?.email}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-500 cursor-not-allowed"
+                  helperText="Email cannot be changed"
+                  slotProps={{ inputLabel: { shrink: true } }}
                 />
-              </div>
-            </div>
+              </Box>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2" color="text.secondary">Role:</Typography>
+                <Chip size="small" color="primary" label={user?.role} sx={{ textTransform: 'capitalize' }} />
+              </Stack>
+              <Box>
+                <Button type="submit" variant="contained" disabled={profileForm.formState.isSubmitting}>
+                  {profileForm.formState.isSubmitting ? 'Saving...' : 'Save Profile'}
+                </Button>
+              </Box>
+            </Stack>
+          </CardContent>
+        </Card>
 
-            <div className="flex items-center gap-2 pt-1">
-              <span className="text-xs font-semibold text-slate-500">Current Role:</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300">
-                {user?.role}
-              </span>
-            </div>
-          </div>
+        <Card>
+          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+            <SectionTitle icon={<LockOutlinedIcon />} title="Change Password" subtitle="At least 8 characters, 1 uppercase letter and 1 number." />
+            <Stack component="form" spacing={2.5} onSubmit={passwordForm.handleSubmit(savePassword)} noValidate>
+              <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
+                <TextField
+                  label="Current Password"
+                  type="password"
+                  autoComplete="current-password"
+                  {...passwordForm.register('currentPassword')}
+                  error={!!passwordForm.formState.errors.currentPassword}
+                  helperText={passwordForm.formState.errors.currentPassword?.message}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
+                <TextField
+                  label="New Password"
+                  type="password"
+                  autoComplete="new-password"
+                  {...passwordForm.register('newPassword')}
+                  error={!!passwordForm.formState.errors.newPassword}
+                  helperText={passwordForm.formState.errors.newPassword?.message}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
+              </Box>
+              <Box>
+                <Button type="submit" variant="contained" disabled={passwordForm.formState.isSubmitting}>
+                  {passwordForm.formState.isSubmitting ? 'Updating...' : 'Update Password'}
+                </Button>
+              </Box>
+            </Stack>
+          </CardContent>
+        </Card>
 
-          {/* Preferences */}
-          <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
-            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-brand-600" />
-              Appearance & Theme
-            </h3>
-
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800">
-              <div>
-                <p className="font-bold text-xs text-slate-800 dark:text-white">Color Mode</p>
-                <p className="text-[11px] text-slate-500">Currently in {theme} mode</p>
-              </div>
-
-              <button
-                type="button"
+        <Card>
+          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+            <SectionTitle icon={<PaletteOutlinedIcon />} title="Appearance" subtitle="Your choice is saved in this browser." />
+            <Divider sx={{ mb: 2 }} />
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography>Currently using <b>{theme}</b> mode</Typography>
+              <Button
+                variant="outlined"
                 onClick={toggleTheme}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-subtle hover:bg-slate-50"
+                startIcon={theme === 'dark' ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
               >
-                {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
                 Switch to {theme === 'dark' ? 'Light' : 'Dark'}
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs bg-brand-600 hover:bg-brand-700 text-white shadow-elevated transition-colors"
-          >
-            <Save className="w-3.5 h-3.5" />
-            Save Changes
-          </button>
-        </form>
-      </div>
-    </div>
+              </Button>
+            </Stack>
+          </CardContent>
+        </Card>
+      </Stack>
+    </Container>
   );
 };

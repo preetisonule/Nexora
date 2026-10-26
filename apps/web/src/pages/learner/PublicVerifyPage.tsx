@@ -1,133 +1,152 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ApiClient } from '../../services/api';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ShieldCheck,
-  XCircle,
-  Award,
-  Calendar,
-  Layers,
-  ArrowRight,
-  ExternalLink,
-} from 'lucide-react';
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Container,
+  Divider,
+  InputAdornment,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
+import GppBadRoundedIcon from '@mui/icons-material/GppBadRounded';
+import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
+import { ApiClient } from '../../services/api';
 
+interface VerifiedCertificate {
+  certificateId: string;
+  learnerName: string;
+  courseTitle: string;
+  courseLevel: string;
+  issueDate: string;
+  status: 'valid' | 'revoked';
+  revocationReason?: string;
+}
+
+/**
+ * Public certificate check. `/verify` shows a lookup form, `/verify/:certificateId` shows the result.
+ */
 export const PublicVerifyPage: React.FC = () => {
-  const { certificateId } = useParams<{ certificateId: string }>();
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { certificateId } = useParams<{ certificateId?: string }>();
+  const navigate = useNavigate();
+  const [query, setQuery] = useState(certificateId || '');
+  const [cert, setCert] = useState<VerifiedCertificate | null>(null);
+  const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    ApiClient.get<any>(`/certificates/${certificateId}/verify`)
-      .then((res) => {
-        setData(res);
-      })
-      .catch(() => {
-        setNotFound(true);
-      })
+    setQuery(certificateId || '');
+    setCert(null);
+    setNotFound(false);
+    if (!certificateId) return;
+
+    setLoading(true);
+    // ApiClient returns the certificate itself; validity comes from its status field
+    ApiClient.get<VerifiedCertificate>(`/certificates/${encodeURIComponent(certificateId)}/verify`)
+      .then((data) => (data ? setCert(data) : setNotFound(true)))
+      .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [certificateId]);
 
-  if (loading) {
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center p-4 animate-pulse">
-        <div className="h-48 bg-slate-200 dark:bg-slate-800 rounded-2xl w-full max-w-lg" />
-      </div>
-    );
-  }
+  const handleLookup = (e: React.FormEvent) => {
+    e.preventDefault();
+    const id = query.trim().toUpperCase();
+    if (id) navigate(`/verify/${encodeURIComponent(id)}`);
+  };
 
-  const cert = data?.data || data?.certificate;
-  const isValid = data?.valid === true;
+  const isValid = cert?.status === 'valid';
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center px-4 py-16">
-      <div className="max-w-xl w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-8 sm:p-10 space-y-6">
-        {/* Verification Status Header */}
-        <div className="text-center space-y-3">
-          <div
-            className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-sm ${
-              isValid
-                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                : 'bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
-            }`}
-          >
-            {isValid ? <ShieldCheck className="w-8 h-8" /> : <XCircle className="w-8 h-8" />}
-          </div>
+    <Container maxWidth="sm" sx={{ py: { xs: 5, md: 8 } }}>
+      <Stack spacing={1} alignItems="center" textAlign="center" sx={{ mb: 4 }}>
+        <WorkspacePremiumOutlinedIcon sx={{ fontSize: 48, color: 'primary.main' }} />
+        <Typography variant="h4">Verify a Certificate</Typography>
+        <Typography color="text.secondary">
+          Enter the certificate ID printed on a Nexora certificate (for example COMPILO-GO-2026-1A2B3C4D).
+        </Typography>
+      </Stack>
 
-          <div>
-            <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">
-              Nexora Learn Registry
-            </span>
-            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-              {isValid ? 'Verified Credential' : 'Invalid or Revoked Certificate'}
-            </h1>
-            <p className="text-xs text-slate-500 font-mono mt-1">
-              ID: {certificateId}
-            </p>
-          </div>
-        </div>
+      <Card>
+        <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
+          <Stack component="form" direction={{ xs: 'column', sm: 'row' }} spacing={1.5} onSubmit={handleLookup}>
+            <TextField
+              placeholder="Certificate ID"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              slotProps={{
+                input: {
+                  sx: { fontFamily: 'JetBrains Mono, monospace' },
+                  startAdornment: <InputAdornment position="start"><SearchRoundedIcon fontSize="small" /></InputAdornment>,
+                },
+              }}
+            />
+            <Button type="submit" variant="contained" disabled={!query.trim()} sx={{ flexShrink: 0 }}>
+              Verify
+            </Button>
+          </Stack>
 
-        {isValid && cert ? (
-          <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs">
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 font-medium">Recipient:</span>
-                <span className="font-bold text-slate-900 dark:text-white text-sm">
-                  {cert.learnerName}
-                </span>
-              </div>
+          {loading && (
+            <Stack alignItems="center" sx={{ py: 5 }}>
+              <CircularProgress />
+            </Stack>
+          )}
 
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 font-medium">Course:</span>
-                <span className="font-bold text-brand-600 dark:text-brand-400">
-                  {cert.courseTitle}
-                </span>
-              </div>
+          {!loading && notFound && (
+            <Alert severity="error" icon={<GppBadRoundedIcon />} sx={{ mt: 3, borderRadius: 3 }}>
+              No certificate with ID <b>{certificateId}</b> exists. Check the ID and try again.
+            </Alert>
+          )}
 
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 font-medium">Level:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {cert.courseLevel || 'Beginner to Intermediate'}
-                </span>
-              </div>
+          {!loading && cert && (
+            <Box sx={{ mt: 3 }}>
+              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+                {isValid ? (
+                  <VerifiedRoundedIcon color="success" sx={{ fontSize: 40 }} />
+                ) : (
+                  <GppBadRoundedIcon color="error" sx={{ fontSize: 40 }} />
+                )}
+                <Box>
+                  <Typography variant="h6">{isValid ? 'Verified Credential' : 'Certificate Revoked'}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    {cert.certificateId}
+                  </Typography>
+                </Box>
+              </Stack>
 
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 font-medium">Issue Date:</span>
-                <span className="font-medium text-slate-700 dark:text-slate-300">
-                  {new Date(cert.issueDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                </span>
-              </div>
+              {!isValid && (
+                <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
+                  This certificate is no longer valid.{cert.revocationReason ? ` Reason: ${cert.revocationReason}` : ''}
+                </Alert>
+              )}
 
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 font-medium">Status:</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                  Officially Valid
-                </span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-400 text-center leading-relaxed">
-              This digital credential verifies the candidate demonstrated verified competency in Go syntax, data structures, concurrency, error handling, and completed the required capstone project.
-            </p>
-          </div>
-        ) : (
-          <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs text-center space-y-1">
-            <p className="font-bold">Certificate verification failed.</p>
-            <p className="opacity-90">
-              The requested identifier could not be verified in the active registry. It may have been revoked or does not exist.
-            </p>
-          </div>
-        )}
-
-        <div className="pt-2 text-center">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
-          >
-            Visit Nexora Learn Platform <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-      </div>
-    </div>
+              <Divider />
+              {[
+                ['Recipient', cert.learnerName],
+                ['Course', cert.courseTitle],
+                ['Level', cert.courseLevel],
+                ['Issue date', new Date(cert.issueDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })],
+              ].map(([label, value]) => (
+                <Stack key={label} direction="row" justifyContent="space-between" spacing={2} sx={{ py: 1.25, borderBottom: 1, borderColor: 'divider' }}>
+                  <Typography variant="body2" color="text.secondary">{label}</Typography>
+                  <Typography variant="body2" fontWeight={700} textAlign="right">{value}</Typography>
+                </Stack>
+              ))}
+              <Stack direction="row" justifyContent="space-between" sx={{ py: 1.25 }}>
+                <Typography variant="body2" color="text.secondary">Status</Typography>
+                <Chip size="small" label={isValid ? 'Valid' : 'Revoked'} color={isValid ? 'success' : 'error'} />
+              </Stack>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+    </Container>
   );
 };
